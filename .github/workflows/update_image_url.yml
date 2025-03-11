@@ -1,0 +1,25 @@
+name: Update Image URL in DB
+
+on:
+  push:
+    paths:
+      - 'photo/pictures/**'
+
+jobs:
+  update-db:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+      
+      - name: Install dependencies
+        run: pip install psycopg2-binary
+      
+      - name: Run handle.py
+        env:
+          DB_URL: ${{ secrets.DB_URL }}
+        run: python photo/handle.py
