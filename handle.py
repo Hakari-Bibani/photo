@@ -1,61 +1,52 @@
 import os
 import psycopg2
 
-# Base URL for your GitHub repository images.
-GITHUB_BASE_URL = "https://github.com/Hakari-Bibani/photo/blob/main/pictures"
-# Directory path for your images.
-# This script expects the pictures to be available locally.
-# If you are syncing your repository on an online server, adjust this path accordingly.
-PICTURES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "photo", "pictures")
+# Retrieve connection string from environment variable for security.
+conn_str = os.environ.get("CONNECTION_STRING")
+if not conn_str:
+    raise ValueError("Please set the CONNECTION_STRING environment variable.")
 
-# Neon PostgreSQL online connection string
-CONNECTION_STRING = (
-    "postgresql://neondb_owner:npg_YqBVZNepQ18x@"
-    "ep-orange-bread-a9efjwmt-pooler.gwc.azure.neon.tech/neondb?sslmode=require"
-)
+# Directory where the pictures are stored
+pictures_dir = "photo/pictures"
 
-def update_common_name_url(conn, common_name, url):
-    """
-    Update the Common_name_url column for the given common_name (case-insensitive).
-    """
+# Base URL for images in your GitHub repo
+url_base = "https://github.com/Hakari-Bibani/photo/blob/main/pictures/"
+
+def update_db(common_name, file_name):
+    """Update the database row for a given common name with the image URL."""
     try:
-        with conn.cursor() as cursor:
-            # Use lower() on both sides to ensure case-insensitive matching.
-            sql = """
-            UPDATE "public"."photo"
-            SET "Common_name_url" = %s
-            WHERE lower("Common_name") = lower(%s)
-            """
-            cursor.execute(sql, (url, common_name))
+        # Construct full URL
+        url = url_base + file_name
+        
+        # Connect to your Neon PostgreSQL database
+        conn = psycopg2.connect(conn_str)
+        cursor = conn.cursor()
+        
+        # SQL: update the row matching common name (case-insensitive)
+        query = """
+        UPDATE public.photo
+        SET Common_name_url = %s
+        WHERE LOWER(Common_name) = LOWER(%s)
+        """
+        cursor.execute(query, (url, common_name))
         conn.commit()
-        print(f"Updated {common_name} with URL: {url}")
+        
+        print(f"Updated '{common_name}' with URL: {url}")
     except Exception as e:
-        print(f"Error updating {common_name}: {e}")
-        conn.rollback()
-
-def process_images():
-    # Connect to the Neon online database.
-    try:
-        conn = psycopg2.connect(CONNECTION_STRING)
-        print("Connected to Neon database successfully.")
-    except Exception as e:
-        print(f"Error connecting to the database: {e}")
-        return
-
-    try:
-        # Process each file in the pictures directory.
-        for filename in os.listdir(PICTURES_DIR):
-            # Check for common image file extensions.
-            if filename.lower().endswith((".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff")):
-                # Extract the common name (filename without extension).
-                common_name, _ = os.path.splitext(filename)
-                # Construct the image URL.
-                image_url = f"{GITHUB_BASE_URL}/{filename}"
-                # Update the record in the online Neon database.
-                update_common_name_url(conn, common_name, image_url)
+        print(f"Error updating '{common_name}': {e}")
     finally:
-        conn.close()
-        print("Database connection closed.")
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+def main():
+    # List all image files in the pictures directory
+    for file_name in os.listdir(pictures_dir):
+        if file_name.lower().endswith((".jpg", ".jpeg", ".png", ".gif")):
+            # Remove the file extension to get the common name
+            common_name = os.path.splitext(file_name)[0]
+            update_db(common_name, file_name)
 
 if __name__ == "__main__":
-    process_images()
+    main()
